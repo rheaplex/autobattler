@@ -1,0 +1,14 @@
+{
+  "name": "autogame",
+  "module": "index.js",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@onflow/fcl": "^1.13.4"
+  }
+}
