@@ -675,7 +675,7 @@ access(all) contract AutoGame {
     access(all) event AttackPerformed(attacker: String, defender: String, damage: UInt8, remainingHealth: UInt8)
     access(all) event CharacterFainted(character: String)
     access(all) event TurnEnded(winner: Address, loser: Address)
-    access(all) event BattleEnded(winner: Address, loser: Address, turns: UInt32)
+    access(all) event BattleEnded(winner: Address?, loser: Address?, turns: UInt32)
     access(all) event EloUpdated(player: Address, oldElo: Fix64, newElo: Fix64, change: Fix64)
     access(all) event CharacterAttack(attacker: String, defender: String, damage: UInt8, remainingHealth: UInt8)
     access(all) event CharacterDefeated(character: String)
@@ -754,7 +754,7 @@ access(all) contract AutoGame {
 
         access(all) fun executeRound(number: Int, char1: &CharacterInstance, char2: &CharacterInstance, currentChar1Damage: UInt8, currentChar2Damage: UInt8): [UInt8; 2] {
                 var newCurrentCharDamages: [UInt8; 2] = [currentChar1Damage, currentChar2Damage]
-                // Alternate attack initiative
+                // Alternate attack initiative each round
                 if number % 2 == 1 {
                     // char1 attacks first
                     newCurrentCharDamages[1] = self.characterAttack(attacker: char1, defender: char2, currentDefenderDamage: currentChar2Damage)
@@ -798,6 +798,12 @@ access(all) contract AutoGame {
             if self.currentTurn > self.numTurns {
                 self.gameState = GameState.Finished
                 self.determineGameWinner()
+                if self.winner != nil && self.loser != nil {
+                    emit BattleEnded(winner: self.winner, loser: self.loser, turns: self.numTurns)
+                } else {
+                    // No one won, so it's a draw.
+                    emit BattleEnded(winner: nil, loser: nil, turns: self.numTurns)
+                }
             }
         }
 
