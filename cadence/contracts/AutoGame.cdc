@@ -687,7 +687,10 @@ access(all) contract AutoGame {
 
     access(all) enum GameState: UInt8 {
         access(all) case Initial
-        access(all) case Started
+        access(all) case PreparationPhase
+        access(all) case OnePlayerPrepared
+        access(all) case BothPlayersPrepared
+        access(all) case BattlePhase
         access(all) case Finished
         access(all) case Error
     }
@@ -732,11 +735,14 @@ access(all) contract AutoGame {
             assert(self.player1Roster.getLength() == self.player2Roster.getLength(), message: "Battle constructor: Player rosters must have the same length")  
         }
 
-        access(all) fun startBattle() {
+        access(all) fun prepareForBattle() {
             pre {
-                self.gameState == GameState.Initial: "Battle must be in Initial state to start"
+                self.gameState == GameState.BothPlayersPrepared : "Game must be in Preparation state to prepare for battle"
             }
-            self.gameState = GameState.Started
+            //FIXME: Add gold to character.
+            //FIXME: Allow player to set up their characters etc.
+            //FIXME: Both players must call this function, then we set this to battle.
+            self.gameState = GameState.BattlePhase
         }
 
         access(all) fun characterAttack(attacker: &CharacterInstance, defender: &CharacterInstance, currentDefenderDamage: UInt8): UInt8 {
@@ -794,8 +800,9 @@ access(all) contract AutoGame {
 
         access(all) fun updateGameState() {
             self.currentTurn = self.currentTurn + 1
-            // If we have finished the battle.
-            if self.currentTurn > self.numTurns {
+            if self.currentTurn < self.numTurns {
+                self.gameState = GameState.PreparationPhase
+            } else {
                 self.gameState = GameState.Finished
                 self.determineGameWinner()
                 if self.winner != nil && self.loser != nil {
@@ -809,8 +816,9 @@ access(all) contract AutoGame {
 
         access(all) fun executeTurn() {
             pre {
-                self.gameState == GameState.Started: "Battle must be in Started state to execute turn"
+                self.gameState == GameState.BattlePhase: "Game must be in Battle state to execute turn"
                 self.currentTurn < self.numTurns: "Battle is already over"
+                self.gameState != GameState.Error: "Battle is in an error state"
             }
 
             // Battle each pair of characters
