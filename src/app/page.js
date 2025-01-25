@@ -1,14 +1,15 @@
 "use client";
 
-import Image from "next/image";
+import { configFCL } from "./fcl";
 import BattleEvents from "./battle";
-
-const BATTLE_CREATED_EVENT = "A.0xSUPER.SuperAutoPets.BattleCreated";
+import CardEvents from "./cards";
 
 export default function Home() {
+  configFCL();
   return (
     <div>
       <BattleEvents />
+      <CardEvents />
     </div>
   );
 }

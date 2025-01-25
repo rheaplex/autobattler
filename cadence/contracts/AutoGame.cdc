@@ -17,6 +17,19 @@ access(all) contract AutoGame {
     // The player's current battle
     access(all) let BattleCurrentStoragePath: StoragePath
 
+   // -----------------------------------------------------------
+    // CARD Events
+    // -----------------------------------------------------------
+
+    access(all) event CardCreated(
+        id: UInt64,
+        name: String,
+        url: String,
+        attack: UInt32,
+        health: UInt32,
+        level: UInt8
+    )   
+
     // -----------------------------------------------------------
     // CARD NFTS
     // -----------------------------------------------------------
@@ -45,6 +58,14 @@ access(all) contract AutoGame {
             self.attack = initAttack
             self.health = initHealth
             self.level = initLevel
+            emit CardCreated(
+                id: self.id,
+                name: self.name,
+                url: self.url,
+                attack: self.attack,
+                health: self.health,
+                level: self.level
+            )
         }
 
         access(all) view fun getViews(): [Type] {
@@ -112,7 +133,8 @@ access(all) contract AutoGame {
 
         access(all) fun borrowCard(id: UInt64): &Card {
            let nft: &{NonFungibleToken.NFT}? = &self.ownedNFTs[id]
-           return nft as! &Card
+           let card: &Card = nft! as! &Card
+           return card
         }
 
         // Required by the standard to return a withdrawn NFT
@@ -185,6 +207,8 @@ access(all) contract AutoGame {
 
     access(all) event BattleCreated(
         battleID: UInt64,
+        team1Address: Address,
+        team2Address: Address,
         team1IDs: [UInt64],
         team2IDs: [UInt64]
     )
@@ -192,6 +216,8 @@ access(all) contract AutoGame {
     access(all) event BattleTurnAdvanced(
         battleID: UInt64,
         turnIndex: UInt64,
+        attackerCardIndex: Int,
+        defenderCardIndex: Int,
         attackerCardID: UInt64,
         defenderCardID: UInt64,
         damageToAttacker: UInt32,
@@ -218,10 +244,28 @@ access(all) contract AutoGame {
     access(all) var battleCounter: UInt64
 
     // -----------------------------------------------------------
+    // CHECK THAT WE CAN BORROW THE SPECIFIED CARDS
+    // utility function for calling in Battte's init pre{}
+    // before it can access its self.
+    // -----------------------------------------------------------
+
+    access(self) view fun checkCardsAccess(collectionCap: Capability<&CardCollection>, ids: [UInt64]): Bool {
+        let collectionIDs = collectionCap.borrow()!.getIDs()
+        var does = true
+        for id in ids {
+            if !collectionIDs.contains(id) {
+                does = false
+                break
+            }
+        }
+        return does
+    }
+
+    // -----------------------------------------------------------
     // BATTLE RESOURCE
     // -----------------------------------------------------------
- 
-      access(all) resource Battle {
+
+    access(all) resource Battle {
         access(all) let battleID: UInt64
 
         access(all) let team1Cap: Capability<&CardCollection>
@@ -250,6 +294,12 @@ access(all) contract AutoGame {
             ids1: [UInt64],
             ids2: [UInt64]
         ) {
+            pre {
+                cap1.address != cap2.address: "Player cannot battle themself."
+                ids1.length == ids2.length: "Both players must use the same number of cards!"
+                AutoGame.checkCardsAccess(collectionCap: cap1, ids: ids1): "Could not borrow all of player 1's cards"
+                AutoGame.checkCardsAccess(collectionCap: cap2, ids: ids2): "Could not borrow all of player 2's cards"
+            }
             self.battleID = battleID
             self.team1Cap = cap1
             self.team2Cap = cap2
@@ -265,6 +315,14 @@ access(all) contract AutoGame {
             self.ended = false
 
             self.turnIndex = 0
+
+            emit BattleCreated(
+                battleID: self.battleID,
+                team1Address: self.team1Cap.address,
+                team2Address: self.team2Cap.address,
+                team1IDs: self.team1CardIDs,
+                team2IDs: self.team2CardIDs
+            )
         }
 
         // This function executes exactly ONE "exchange of blows."
@@ -290,16 +348,18 @@ access(all) contract AutoGame {
             let damageToCard2 = Card1.attack
 
             // Apply damage
-            self.team1CardHealth = Card1.health - damageToCard1
-            self.team2CardHealth = Card2.health - damageToCard2
+            self.team1CardHealth = self.team1CardHealth.saturatingSubtract(damageToCard1)
+            self.team2CardHealth = self.team2CardHealth.saturatingSubtract(damageToCard2)
 
             // Increment turnIndex
             self.turnIndex = self.turnIndex + 1
 
             // Emit an event for the turn
-            emit BattleTurnAdvanced(
+            emit BattleTurnAdvanced( 
                 battleID: self.battleID,
                 turnIndex: self.turnIndex,
+                attackerCardIndex: self.t1Index,
+                defenderCardIndex: self.t2Index,
                 attackerCardID: Card1.id,
                 defenderCardID: Card2.id,
                 damageToAttacker: damageToCard1,
@@ -361,11 +421,6 @@ access(all) contract AutoGame {
             ids2: team2IDs
         )
 
-        emit BattleCreated(
-            battleID: newBattleID,
-            team1IDs: team1IDs,
-            team2IDs: team2IDs
-        )
         return <- newBattle
     }
 

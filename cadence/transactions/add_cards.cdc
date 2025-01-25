@@ -33,7 +33,7 @@ transaction(
         var count: UInt8 = 0
         var level: UInt8 = 0
         while count < amount {
-            var attack: UInt32 = 1 + revertibleRandom<UInt32>(modulo:4)
+            var attack: UInt32 = 1 + revertibleRandom<UInt32>(modulo:2)
             var health: UInt32 = 2 + revertibleRandom<UInt32>(modulo:6)
             let mintedNFT<-  self.minter.mintCard(
                 name: "Card ".concat(count.toString()),

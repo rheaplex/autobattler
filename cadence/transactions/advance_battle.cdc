@@ -12,7 +12,6 @@ transaction() {
     }
 
     execute {
-        let result = self.battleRef.advanceTurn()
-        log("Battle turn completed. Result: ".concat(result))
+        self.battleRef.advanceTurn()
     }
 }
