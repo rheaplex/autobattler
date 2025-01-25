@@ -1,11 +1,14 @@
 // Trigger time?
-// before start, after start,
-// before attack, after attack, before defence, after defence,
-// before damage, after damage, before freeze, after freeze, before death, after death,
-// before end, after end,
-// before turn, after turn
-// DURING?
+//
+// on...
+// start of battle
+// hurt
+// freezing
+// fainting
+// teammate freezing
+// teammate fainting
 
+/*
 
 access(all) attachment Ability for CharacterInstance {
     // How many turns it takes to initially activate the ability
@@ -34,3 +37,5 @@ access(all) Struct AbilityState {
     // Ability
     // Turn count, for setup/cooldown
 }
+
+*/

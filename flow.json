@@ -1,9 +1,9 @@
 {
 	"contracts": {
-		"Counter": {
-			"source": "cadence/contracts/Counter.cdc",
+		"AutoGame": {
+			"source": "cadence/contracts/AutoGame.cdc",
 			"aliases": {
-				"testing": "0000000000000007"
+				"emulator": "f8d6e0586b0a20c7"
 			}
 		}
 	},
@@ -97,12 +97,33 @@
 		"testnet": "access.devnet.nodes.onflow.org:9000"
 	},
 	"accounts": {
+		"alice": {
+			"address": "179b6b1cb6755e31",
+			"key": {
+				"type": "file",
+				"location": "alice.pkey"
+			}
+		},
+		"carol": {
+			"address": "f3fcd2c1a78f5eee",
+			"key": {
+				"type": "file",
+				"location": "carol.pkey"
+			}
+		},
 		"emulator-account": {
 			"address": "f8d6e0586b0a20c7",
 			"key": {
 				"type": "file",
 				"location": "emulator-account.pkey"
 			}
+		}
+	},
+	"deployments": {
+		"emulator": {
+			"emulator-account": [
+				"AutoGame"
+			]
 		}
 	}
 }
