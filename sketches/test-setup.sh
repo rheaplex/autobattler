@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# BEFORE RUNNING THIS, MAKE SURE YOU HAVE RUN:
+# flow emulator
+# flow projects deploy
+# flow dev-wallet
+
 ALICE=179b6b1cb6755e31
 CAROL=f3fcd2c1a78f5eee
 
@@ -13,8 +18,8 @@ expect -c "send 'carol'" \
 --network emulator \
 --key 1ea5e2e6640073aff36dbe9a9f4fb5876adc80383d01947c0ab910da937cc324d02067712eec43c54842e83bf443731a61422995a9006c97f7c607f4b930e868
 
-flow transactions send "cadence/transactions/transfer_flow.cdc" --signer emulator-account 1.0 $ALICE
-flow transactions send "cadence/transactions/transfer_flow.cdc" --signer emulator-account 1.0 $CAROL
-
 flow transactions send "cadence/transactions/setup_account.cdc" --signer alice
 flow transactions send "cadence/transactions/setup_account.cdc" --signer carol
+
+flow transactions send "cadence/transactions/add_cards.cdc" --signer "emulator-account" "$ALICE" "10"
+flow transactions send "cadence/transactions/add_cards.cdc" --signer "emulator-account" "$CAROL" "10"

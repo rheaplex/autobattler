@@ -3,3 +3,5 @@ alice.pkey
 carol.pkey
 imports
 node_modules
+.DS_Store
+.next/

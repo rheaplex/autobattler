@@ -1,450 +1,555 @@
+import "FlowToken"
 import "NonFungibleToken"
-import "MetadataViews"
-import "ViewResolver"
+import "RandomBeaconHistory"
+
+import "Xorshift128plus"
 
 access(all) contract AutoGame {
 
     // -----------------------------------------------------------
-    // PUBLIC PATHS 
+    // PUBLIC PATHS - JUST SAY NO
     // -----------------------------------------------------------
 
-    // Where the user's Collection is stored in their account
-    access(all) let CardCollectionStoragePath: StoragePath
-    // Where a public capability to the Collection is made available
-    access(all) let CardCollectionPublicPath: PublicPath
-    // The minter resource
-    access(all) let CardMinterStoragePath: StoragePath
-    // The player's current battle
-    access(all) let BattleCurrentStoragePath: StoragePath
+    access(all) let DomainCollectionStoragePath: StoragePath
+    access(all) let DomainCollectionPublicPath: PublicPath
+    access(all) let RunCollectionStoragePath: StoragePath
+    access(all) let RunCollectionPublicPath: PublicPath
 
-   // -----------------------------------------------------------
-    // CARD Events
+
+
+
+    // -----------------------------------------------------------
+    // ENUMS
     // -----------------------------------------------------------
 
-    access(all) event CardCreated(
+    access(all) enum BattleProgress: UInt8 {
+        // Just two states: battle created and started but not resolved yet,
+        // and battle resolved.
+        //access(all) case NotStarted
+        access(all) case InProgress
+        access(all) case Resolved
+    }
+
+    access(all) enum BattleResult: UInt8 {
+        access(all) case Undecided
+        access(all) case Win
+        access(all) case Lose
+        access(all) case Draw
+    }
+
+    // -----------------------------------------------------------
+    // EVENTS
+    // -----------------------------------------------------------
+
+    access(all) event DomainCreated(
+        id: UInt64
+    )
+
+    access(all) event DomainDestroyed(
+        id: UInt64
+    )
+
+    access(all) event DomainStarted(
         id: UInt64,
-        name: String,
-        url: String,
-        attack: UInt32,
-        health: UInt32,
-        level: UInt8
-    )   
+        payment: UFix64
+    )
+
+    access(all) event DomainCollectionCreated(
+        owner: Address
+    )
+
+    access(all) event RunCreated(
+        id: UInt64,
+        DomainId: UInt64
+    )
+
+    access(all) event RunDestroyed(
+        id: UInt64
+    )
+
+    access(all) event RunCollectionCreated(
+        owner: Address
+    )
 
     // -----------------------------------------------------------
-    // CARD NFTS
+    // INTERFACES
     // -----------------------------------------------------------
 
-    access(all) resource Card: NonFungibleToken.NFT {
-        // The unique ID required by the NFT standard
+    access(all) struct interface EntityMetadata {
+        access(all) let id: UInt64
+        access(all) let name: String
+        access(all) let url: String
+    }
+
+    access(all) struct interface BattleState {
+        access(all) var myTeam: [UInt64]
+        access(all) var myGold: UInt8
+        access(all) var myHearts: UInt8
+        access(all) var myRibbons: UInt8
+        access(all) var theirTeam: [UInt64]
+        access(all) var theirGold: UInt8
+        access(all) var theirHearts: UInt8
+        access(all) var theirRibbons: UInt8
+        access(all) let entityStates: {UInt64: {UInt64: UInt8}}
+
+        access(all) fun copy(): {BattleState}
+        access(all) fun setMyTeam(_ team: [UInt64]) {
+            self.myTeam = team
+        }
+        access(all) fun setMyGold(_ gold: UInt8) {
+            self.myGold = gold
+        }
+        access(all) fun setMyHearts(_ hearts: UInt8) {
+            self.myHearts = hearts
+        }
+        access(all) fun setMyRibbons(_ ribbons: UInt8) {
+            self.myRibbons = ribbons
+        }
+        access(all) fun setTheirTeam(_ team: [UInt64]) {
+            self.theirTeam = team
+        }
+        access(all) fun setTheirGold(_ gold: UInt8) {
+            self.theirGold = gold
+        }
+        access(all) fun setTheirHearts(_ hearts: UInt8) {
+            self.theirHearts = hearts
+        }
+        access(all) fun setTheirRibbons(_ ribbons: UInt8) {
+            self.theirRibbons = ribbons
+        }
+    }
+
+    access(all) resource interface Battle {
+        access(all) let id: UInt64
+        access(all) var progress: BattleProgress
+        access(all) var result: BattleResult
+        access(all) let initialState: {BattleState}
+        access(all) let DomainCollection: Capability<&DomainCollection>
+        access(all) let DomainId: UInt64
+
+        access(all) fun start()
+        access(all) fun resolve(): [{BattleState}]
+        access(all) fun replay(): [{BattleState}]
+    }
+
+    access(all) resource interface Run {
+        access(all) let id: UInt64
+        access(all) let DomainCollection: Capability<&DomainCollection>
+        access(all) let DomainId: UInt64
+        access(all) var battles: @[{Battle}]
+
+        access(all) fun createBattle(): UInt64
+        access(all) fun battleCount(): Int
+        access(all) fun borrowBattle(index: Int): &{Battle}
+    }
+
+// Nope. Entities are object implementing an interface. Any functions go through the Domain.
+//       Instances of the entity?
+//       Create copy/ref rather than switch statements!
+//       Domain has list of objects.
+    access(all) resource interface EntityLibrary {
+        access(all) let id: UInt64
+        access(all) fun getEntityIDs(): [UInt64]
+        access(all) fun getEntityMetadata(id: UInt64): &{EntityMetadata}
+        access(all) fun updateBattleStateForEntity(id: UInt64, state: {BattleState}): {BattleState}
+    }
+
+    access(all) resource interface Domain: EntityLibrary {
         access(all) let id: UInt64
 
-        // Attributes
-        access(all) var name: String
-        access(all) var url: String
-        access(all) var attack: UInt32
-        access(all) var health: UInt32
-        access(all) var level: UInt8
+        access(all) fun start(payment: @FlowToken.Vault,DomainCollection: Capability<&DomainCollection>): @{Run}
+        access(all) fun getRunPrice(): UFix64
+    }
 
-        init(
-            initName: String,
-            initUrl: String,
-            initAttack: UInt32,
-            initHealth: UInt32,
-            initLevel: UInt8
-        ) {
-            self.id = self.uuid
-            self.url = initUrl
-            self.name = initName
-            self.attack = initAttack
-            self.health = initHealth
-            self.level = initLevel
-            emit CardCreated(
-                id: self.id,
-                name: self.name,
-                url: self.url,
-                attack: self.attack,
-                health: self.health,
-                level: self.level
-            )
-        }
+    //-----------------------------------------------------------
+    // DEFAULT IMPLEMENTATIONS
+    //-----------------------------------------------------------
 
-        access(all) view fun getViews(): [Type] {
-            return [
-                Type<MetadataViews.Display>(),
-                Type<MetadataViews.NFTCollectionData>(),
-                Type<MetadataViews.NFTCollectionDisplay>(),
-                Type<MetadataViews.Traits>()
-            ]
-        }
+    access(all) struct StandardEntityMetadata: EntityMetadata {
+        access(all) let id: UInt64
+        access(all) let name: String
+        access(all) let url: String
 
-        access(all) fun resolveView(_ view: Type): AnyStruct? {
-            switch view {
-                case Type<MetadataViews.Display>():
-                    return MetadataViews.Display(
-                        name: self.name,
-                        description: "AutoGame Character",
-                        thumbnail: MetadataViews.HTTPFile(url: self.url)
-                    )
-                case Type<MetadataViews.Traits>():
-                    return MetadataViews.Traits([
-                        MetadataViews.Trait(name:"health", value: self.health, displayType: "Number", rarity: nil  ),
-                        MetadataViews.Trait(name:"attack", value: self.attack, displayType: "Number", rarity: nil  )
-                    ])
-                case Type<MetadataViews.NFTCollectionData>():
-                    return MetadataViews.NFTCollectionData(
-                        storagePath: AutoGame.CardCollectionStoragePath,
-                        publicPath: AutoGame.CardCollectionPublicPath,
-                        publicCollection: Type<&AutoGame.CardCollection>(),
-                        publicLinkedType: Type<&AutoGame.CardCollection>(),
-                        createEmptyCollectionFunction: (fun (): @{NonFungibleToken.Collection} {
-                            return <-AutoGame.createEmptyCollection(nftType: Type<@Card>())
-                        })
-                    )
-            }
-            return nil
-        }
-
-        access(all) fun createEmptyCollection(): @CardCollection {
-            return <- create CardCollection()
+        init(id: UInt64, name: String, url: String) {
+            self.id = id
+            self.name = name
+            self.url = url
         }
     }
 
-    // -----------------------------------------------------------
-    // CARD COLLECTION
-    // -----------------------------------------------------------
+    access(all) struct StandardBattleState: BattleState {
+        access(all) var myTeam: [UInt64]
+        access(all) var myGold: UInt8
+        access(all) var myHearts: UInt8
+        access(all) var myRibbons: UInt8
+        access(all) var theirTeam: [UInt64]
+        access(all) var theirGold: UInt8
+        access(all) var theirHearts: UInt8
+        access(all) var theirRibbons: UInt8
+    
+        access(all) let entityStates: {UInt64: {UInt64: UInt8}}
 
-    access(all) resource CardCollection: NonFungibleToken.Collection {
-        // The internal dictionary of owned NFTs
-        access(all) var ownedNFTs: @{UInt64: {NonFungibleToken.NFT}}
-
-        access(all) view fun getSupportedNFTTypes(): {Type: Bool} {
-            let supportedTypes: {Type: Bool} = {}
-            supportedTypes[Type<@Card>()] = true
-            return supportedTypes
+        init(
+            myTeam: [UInt64],
+            myGold: UInt8,
+            myHearts: UInt8,
+            myRibbons: UInt8,
+            theirTeam: [UInt64],
+            theirGold: UInt8,
+            theirHearts: UInt8,
+            theirRibbons: UInt8,
+            entityStates: {UInt64: {UInt64: UInt8}}
+        ) {
+            self.myTeam = myTeam
+            self.myGold = myGold
+            self.myHearts = myHearts
+            self.myRibbons = myRibbons
+            self.theirTeam = theirTeam
+            self.theirGold = theirGold
+            self.theirHearts = theirHearts
+            self.theirRibbons = theirRibbons
+            self.entityStates = entityStates
         }
 
-        access(all) view fun isSupportedNFTType(type: Type): Bool {
-            return type == Type<@Card>()
+        access(all) fun copy(): {BattleState} {
+            return StandardBattleState(
+                myTeam: self.myTeam,
+                myGold: self.myGold,
+                myHearts: self.myHearts,
+                myRibbons: self.myRibbons,
+                theirTeam: self.theirTeam,
+                theirGold: self.theirGold,
+                theirHearts: self.theirHearts,
+                theirRibbons: self.theirRibbons,
+                entityStates: self.entityStates
+            )
+        }
+    }
+
+    access(all) resource StandardBattle: Battle {
+        access(all) let id: UInt64
+        access(all) var progress: BattleProgress
+        access(all) var result: BattleResult
+        access(all) let initialState: {BattleState}
+        access(all) var randomnessBlock: UInt64
+        access(all) var randomnessFulfilled: Bool
+        access(all) let DomainCollection: Capability<&DomainCollection>
+        access(all) let DomainId: UInt64
+
+        //FIXME: take from shop phase, and previous battles
+        init(DomainCollection: Capability<&DomainCollection>, DomainId: UInt64, initialState: {BattleState}) {
+            self.id = self.uuid
+            self.initialState = initialState
+            self.randomnessBlock = 0
+            self.randomnessFulfilled = false
+            self.progress = BattleProgress.NotStarted
+            self.result = BattleResult.Undecided
+            self.DomainCollection = DomainCollection
+            self.DomainId = DomainId
         }
 
-        access(all) view fun borrowNFT(_ id: UInt64): &{NonFungibleToken.NFT}? {
-            return &self.ownedNFTs[id]
-        }
-
-        access(all) fun borrowCard(id: UInt64): &Card {
-           let nft: &{NonFungibleToken.NFT}? = &self.ownedNFTs[id]
-           let card: &Card = nft! as! &Card
-           return card
-        }
-
-        // Required by the standard to return a withdrawn NFT
-        access(NonFungibleToken.Withdraw) fun withdraw(withdrawID: UInt64): @{NonFungibleToken.NFT} {
-            let token <- self.ownedNFTs.remove(key: withdrawID)
-                ?? panic("Missing NFT in Collection.")
-            return <- token
-        }
-
-        // Required deposit method from the NFT standard
-        access(all) fun deposit(token: @{NonFungibleToken.NFT}) {
-            let id: UInt64 = token.id
-            // Ensure no existing NFT with same ID
-            if self.ownedNFTs[id] != nil {
-                panic("NFT with this ID already exists in Collection!")
+        access(all) fun start() {
+            pre {
+                self.progress == BattleProgress.NotStarted: "Battle already started"
             }
-            self.ownedNFTs[id] <-! token
+            self.progress = BattleProgress.InProgress
+            self.randomnessBlock = getCurrentBlock().height
         }
 
-        // Return an array of all NFT IDs in the collection
-        access(all) view fun getIDs(): [UInt64] {
-            return self.ownedNFTs.keys
+        access(all) fun resolve(): [{BattleState}] {
+            pre {
+                self.progress == BattleProgress.InProgress: "Battle not in progress"
+                !self.randomnessFulfilled: "Randomness already fulfilled"
+            }
+            //---- self._fulfillRandomness()
+            self.progress = BattleProgress.Resolved
+            // Record the battle result onchain.
+            let turns = self.replay()
+            self.result = self.battleResult(turns: turns)
+            return turns
+        }
+        
+        access(all) fun battleResult(turns: [{BattleState}]): BattleResult {
+            pre {
+                self.progress == BattleProgress.Resolved: "Battle not resolved"
+            }
+            let lastTurn = turns[turns.length - 1]
+            let a = lastTurn.myTeam.length
+            let b = lastTurn.theirTeam.length
+            if a > b {
+                return BattleResult.Win
+            } else if a < b {
+                return BattleResult.Lose
+            } else {
+                return BattleResult.Draw
+            }
         }
 
-        access(all) fun createEmptyCollection(): @CardCollection {
-            return <- create CardCollection()
+        access(all) fun replay(): [{BattleState}] {
+            pre {
+                self.progress == BattleProgress.Resolved: "Battle not resolved"
+            }
+            //FIXME: Debug on emulator!
+            let seed: [UInt8] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]//----self.randSeed()
+            //FIXME: Use real salt!!!
+            let salt: [UInt8] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+            let rng = Xorshift128plus.PRG(
+                sourceOfRandomness: seed,
+                salt: salt
+            )
+            let Domain = self.DomainCollection.borrow()!.borrowDomain(id: self.DomainId)
+            let turns: [{BattleState}] = [self.initialState]
+            var it_is_so_on = true
+            while it_is_so_on {
+                let prevState = turns[turns.length - 1]
+                var turn = prevState.copy()
+                for entity in prevState.myTeam {
+                    turn = Domain.updateBattleStateForEntity(id: entity, state: turn)
+                    if turn.myTeam.length == 0 || turn.theirTeam.length == 0 {
+                        it_is_so_on = false
+                    }
+                }
+                for entity in prevState.theirTeam {
+                    turn = Domain.updateBattleStateForEntity(id: entity, state: turn)
+                    if turn.myTeam.length == 0 || turn.theirTeam.length == 0{
+                        it_is_so_on = false
+                    }
+                }
+                turns.append(turn)
+                if turns.length > 100 {
+                    panic(
+                        "Too many turns in the battle "
+                        .concat(turn.myTeam.length.toString()) 
+                        .concat(" ")
+                        .concat(turn.theirTeam.length.toString()) 
+                    )
+                }
+            }
+            return turns
         }
+
+        access(all) fun randSeed(): [UInt8] {
+            return RandomBeaconHistory.sourceOfRandomness(atBlockHeight: self.randomnessBlock).value
+        }
+
+        access(self) fun _fulfillRandomness() {
+            pre {
+                !self.randomnessFulfilled:
+                "RandomConsumer.Request.fulfill(): The random request has already been fulfilled."
+                self.randomnessBlock < getCurrentBlock().height:
+                "RandomConsumer.Request.fulfill(): Cannot fulfill random request before the eligible block height of "
+                .concat((self.randomnessBlock + 1).toString())
+            }
+            self.randomnessFulfilled = true
+
+        }
+    }
+
+    access(all) resource StandardRun: Run {
+        access(all) let id: UInt64
+        access(all) let DomainCollection: Capability<&DomainCollection>
+        access(all) let DomainId: UInt64
+        access(all) var battles: @[{Battle}]
+
+        init(DomainCollection: Capability<&DomainCollection>, DomainId: UInt64) {
+            self.DomainCollection = DomainCollection
+            self.DomainId = DomainId
+            self.id = self.uuid
+            self.battles <- []
+        }
+
+        access(all) fun createBattle(): UInt64 {
+            // The state prior to the first turn
+            let initialState = StandardBattleState(
+                myTeam: [1, 2, 3, 100, 5, 6, 7, 8, 9, 4],
+                myGold: 10,
+                myHearts: 3,
+                myRibbons: 0,
+                theirTeam: [9, 2, 7, 4, 8, 5, 1, 6, 10, 3],
+                theirGold: 10,
+                theirHearts: 3,
+                theirRibbons: 0,
+                entityStates: {}
+            )
+            let Domain = self.DomainCollection.borrow()!.borrowDomain(id: self.DomainId)
+            if Domain.id != self.DomainId {
+                panic("Wrong Domain returned by collection")
+            }
+            let battle <- create StandardBattle(DomainCollection: self.DomainCollection, DomainId: self.DomainId, initialState: initialState)
+            let battleID = battle.id
+            self.battles.append(<-battle)
+            return battleID
+        }
+
+        access(all) fun borrowBattle(index: Int): &{Battle} {
+            pre {
+                index < self.battles.length
+            }
+            return &(self.battles[index])
+        }
+
+        access(all) fun battleCount(): Int {
+            return self.battles.length
+        }
+    }
+
+    access(all) resource StandardDomain: Domain, EntityLibrary {
+        access(all) let id: UInt64
+        access(all) let name: String
+        access(all) let url: String
+        access(all) var runPrice: UFix64
+
+        access(all) var entityIDs: [UInt64]
+        access(all) var entityMetadatas: {UInt64: StandardEntityMetadata}
+
+        init(name: String, url: String, runPrice: UFix64) {
+            self.id = self.uuid
+            self.name = name
+            self.url = url
+            self.entityIDs = []
+            self.entityMetadatas = {}
+            self.runPrice = runPrice
+        }
+
+        access(all) fun start(payment: @FlowToken.Vault, DomainCollection: Capability<&DomainCollection>): @{Run} {
+            destroy payment
+            return <- create StandardRun(DomainCollection: DomainCollection, DomainId: self.id)
+        }
+
+        access(all) fun getEntityIDs(): [UInt64] {
+            return self.entityIDs
+        }
+
+        access(all) fun getEntityMetadata(id: UInt64): &{EntityMetadata} {
+            if let metadata: &{EntityMetadata} = &self.entityMetadatas[id] {
+                return metadata
+            } else {
+                panic("Entity not found")
+            }
+        }
+
+        access(all) fun updateBattleStateForEntity(id: UInt64, state: {BattleState}): {BattleState} {
+            pre {
+                !self.entityIDs.contains(id): "Entity not found"
+            }
+            switch (id) {
+                default:
+                    state.setTheirTeam([])
+            }
+            return state
+        }
+
+        access(all) fun getRunPrice(): UFix64 {
+            return self.runPrice
+        }
+    }
+
+    //-----------------------------------------------------------
+    // COLLECTIONS
+    //-----------------------------------------------------------
+
+    access(all) resource DomainCollection {
+        access(all) let ownedDomains: @{UInt64: {Domain}}
 
         init() {
-            self.ownedNFTs <- {}
+            self.ownedDomains <- {}
         }
-    }
 
-    // -----------------------------------------------------------
-    // MINTER RESOURCE
-    // -----------------------------------------------------------
-
-    access(all) resource CardMinter {
-
-        access(all) fun mintCard(
-            name: String,
-            url: String,
-            attack: UInt32,
-            health: UInt32,
-            level: UInt8
-        ): @{NonFungibleToken.NFT} {
-            // Create the new Card NFT
-            let newCard <-create Card(
-                initName: name,
-                initUrl: url,
-                initAttack: attack,
-                initHealth: health,
-                initLevel: level
-            )
-
-            // Deposit into the recipient's Collection
-            return <- newCard
-        }
-    }
-
-    // -----------------------------------------------------------
-    // MINTER SINGLETON
-    // -----------------------------------------------------------
-
-    access(all) let minter: @CardMinter
-
-    // -----------------------------------------------------------
-    // EVENTS FOR BATTLES
-    // -----------------------------------------------------------
-
-    access(all) event BattleCreated(
-        battleID: UInt64,
-        team1Address: Address,
-        team2Address: Address,
-        team1IDs: [UInt64],
-        team2IDs: [UInt64]
-    )
-
-    access(all) event BattleTurnAdvanced(
-        battleID: UInt64,
-        turnIndex: UInt64,
-        attackerCardIndex: Int,
-        defenderCardIndex: Int,
-        attackerCardID: UInt64,
-        defenderCardID: UInt64,
-        damageToAttacker: UInt32,
-        damageToDefender: UInt32,
-        newAttackerHealth: UInt32,
-        newDefenderHealth: UInt32
-    )
-
-    access(all) event CardFainted(
-        battleID: UInt64,
-        cardID: UInt64
-    )
-
-    access(all) event BattleEnded(
-        battleID: UInt64,
-        winner: Address?,
-        loser: Address?
-    )
-
-    // -----------------------------------------------------------
-    // BATTLE ID COUNTER
-    // -----------------------------------------------------------
-  
-    access(all) var battleCounter: UInt64
-
-    // -----------------------------------------------------------
-    // CHECK THAT WE CAN BORROW THE SPECIFIED CARDS
-    // utility function for calling in Battte's init pre{}
-    // before it can access its self.
-    // -----------------------------------------------------------
-
-    access(self) view fun checkCardsAccess(collectionCap: Capability<&CardCollection>, ids: [UInt64]): Bool {
-        let collectionIDs = collectionCap.borrow()!.getIDs()
-        var does = true
-        for id in ids {
-            if !collectionIDs.contains(id) {
-                does = false
-                break
-            }
-        }
-        return does
-    }
-
-    // -----------------------------------------------------------
-    // BATTLE RESOURCE
-    // -----------------------------------------------------------
-
-    access(all) resource Battle {
-        access(all) let battleID: UInt64
-
-        access(all) let team1Cap: Capability<&CardCollection>
-        access(all) let team2Cap: Capability<&CardCollection>
-
-        access(all) let team1CardIDs: [UInt64]
-        access(all) let team2CardIDs: [UInt64]
-
-        // Indices into the Card ID arrays indicating who is "up next."
-        access(self) var t1Index: Int
-        access(self) var t2Index: Int
-
-        access(all) var team1CardHealth: UInt32
-        access(all) var team2CardHealth: UInt32
-
-        // Whether the battle has ended (no more turns allowed)
-        access(self) var ended: Bool
-
-        // Keep track of how many turns have been processed
-        access(self) var turnIndex: UInt64
-
-        init(
-            battleID: UInt64,
-            cap1: Capability<&CardCollection>,
-            cap2: Capability<&CardCollection>,
-            ids1: [UInt64],
-            ids2: [UInt64]
-        ) {
+        access(all) fun deposit(Domain: @{Domain}) {
             pre {
-                cap1.address != cap2.address: "Player cannot battle themself."
-                ids1.length == ids2.length: "Both players must use the same number of cards!"
-                AutoGame.checkCardsAccess(collectionCap: cap1, ids: ids1): "Could not borrow all of player 1's cards"
-                AutoGame.checkCardsAccess(collectionCap: cap2, ids: ids2): "Could not borrow all of player 2's cards"
+                !self.ownedDomains.keys.contains(Domain.id): "Domain already exists"
             }
-            self.battleID = battleID
-            self.team1Cap = cap1
-            self.team2Cap = cap2
-            self.team1CardIDs = ids1
-            self.team2CardIDs = ids2
-
-            self.t1Index = 0
-            self.t2Index = 0
-
-            self.team1CardHealth = 0
-            self.team2CardHealth = 0
-
-            self.ended = false
-
-            self.turnIndex = 0
-
-            emit BattleCreated(
-                battleID: self.battleID,
-                team1Address: self.team1Cap.address,
-                team2Address: self.team2Cap.address,
-                team1IDs: self.team1CardIDs,
-                team2IDs: self.team2CardIDs
-            )
+            var prev <- self.ownedDomains[Domain.id] <- Domain
+            destroy prev
         }
 
-        // This function executes exactly ONE "exchange of blows."
-        // We require that BOTH players sign the transaction that calls this,
-        // ensuring mutual agreement before each turn advances.
-        access(all) fun advanceTurn() {
-            // If the battle is already ended, do nothing
+        access(all) fun getLength(): Int {
+            return self.ownedDomains.length
+        }
+
+        access(all) fun borrowDomain(id: UInt64): &{Domain} {
+            if let Domain: &{Domain} = &self.ownedDomains[id] {
+                return Domain
+            } else {
+                panic("Domain not found")
+            }
+        }
+
+        access(all) fun getIDs(): [UInt64] {
+            return self.ownedDomains.keys
+        }
+
+        access(all) fun forEachID(_ f: fun (UInt64): Bool): Void {
+            self.ownedDomains.forEachKey(f)
+        }
+    }
+
+    access(all) resource RunCollection {
+        access(all) let ownedRuns: @{UInt64: {Run}}
+
+        init() {
+            self.ownedRuns <- {}
+        }
+
+        access(all) fun deposit(run: @{Run}) {
             pre {
-                !self.ended: "Battle has already ended."
+                !self.ownedRuns.keys.contains(run.id): "Run already exists"
             }
+            var prev <- self.ownedRuns[run.id] <- run
+            destroy prev
+        }
 
-            // Borrow references
-            let team1Ref = self.team1Cap.borrow() 
-                ?? panic("Could not borrow Team1's collection reference.")
-            let team2Ref = self.team2Cap.borrow()
-                ?? panic("Could not borrow Team2's collection reference.")
+        access(all) fun getLength(): Int {
+            return self.ownedRuns.length
+        }
 
-            // Grab the front-line Cards
-            let Card1: &Card = team1Ref.borrowCard(id: self.team1CardIDs[self.t1Index])
-            let Card2: &Card = team2Ref.borrowCard(id: self.team2CardIDs[self.t2Index])
-
-            let damageToCard1 = Card2.attack
-            let damageToCard2 = Card1.attack
-
-            // Apply damage
-            self.team1CardHealth = self.team1CardHealth.saturatingSubtract(damageToCard1)
-            self.team2CardHealth = self.team2CardHealth.saturatingSubtract(damageToCard2)
-
-            // Increment turnIndex
-            self.turnIndex = self.turnIndex + 1
-
-            // Emit an event for the turn
-            emit BattleTurnAdvanced( 
-                battleID: self.battleID,
-                turnIndex: self.turnIndex,
-                attackerCardIndex: self.t1Index,
-                defenderCardIndex: self.t2Index,
-                attackerCardID: Card1.id,
-                defenderCardID: Card2.id,
-                damageToAttacker: damageToCard1,
-                damageToDefender: damageToCard2,
-                newAttackerHealth: self.team1CardHealth,
-                newDefenderHealth: self.team2CardHealth
-            )
-
-            // Check for faints
-            if self.team1CardHealth <= 0 {
-                emit CardFainted(battleID: self.battleID, cardID: Card1.id)
-                self.t1Index = self.t1Index + 1
-            }
-
-            if self.team2CardHealth <= 0 {
-                emit CardFainted(battleID: self.battleID, cardID: Card2.id)
-                self.t2Index = self.t2Index + 1
-            }
-
-            // If a team is out of Cards after that exchange, we finalize
-            if self.t1Index >= self.team1CardIDs.length || self.t2Index >= self.team2CardIDs.length {
-                self.ended = true
-                self.emitResult()
+        access(all) fun borrowRun(id: UInt64): &{Run} {
+            if let run: &{Run} = &self.ownedRuns[id] {
+                return run
+            } else {
+                panic("Run not found")
             }
         }
 
-        // Helper function to produce a final result string
-        access(self) fun emitResult() {
-            if self.t1Index > self.t2Index {
-                // Player 1 wins
-                emit BattleEnded(battleID: self.battleID, winner: self.team1Cap.address, loser: self.team2Cap.address)
-            } else if self.t2Index > self.t1Index {
-                // Player 2 wins
-                emit BattleEnded(battleID: self.battleID, winner: self.team2Cap.address, loser: self.team1Cap.address)
-            }
-            // Draw
-            emit BattleEnded(battleID: self.battleID, winner: nil, loser: nil)
+        access(all) fun getIDs(): [UInt64] {
+            return self.ownedRuns.keys
+        }
+
+        access(all) fun forEachID(_ f: fun (UInt64): Bool): Void {
+            self.ownedRuns.forEachKey(f)
         }
     }
 
     // -----------------------------------------------------------
-    // CREATE BATTLE
+    // PUBLIC FUNCTIONS
     // -----------------------------------------------------------
- 
-    access(all) fun createBattle(
-        team1Cap: Capability<&CardCollection>,
-        team2Cap: Capability<&CardCollection>,
-        team1IDs: [UInt64],
-        team2IDs: [UInt64]
-    ): @Battle {
-        self.battleCounter = self.battleCounter + 1
-        let newBattleID = self.battleCounter
 
-        let newBattle <- create Battle(
-            battleID: newBattleID,
-            cap1: team1Cap,
-            cap2: team2Cap,
-            ids1: team1IDs,
-            ids2: team2IDs
-        )
+    access(all) fun createStandardDomain(name: String, url: String, runPrice: UFix64): @{Domain} {
+        let Domain <- create StandardDomain(name: name, url: url, runPrice: runPrice)
+        return <- Domain
+    }
 
-        return <- newBattle
+    access(all) fun createEmptyDomainCollection(): @DomainCollection {
+        let collection <- create DomainCollection()
+        emit DomainCollectionCreated(owner: self.account.address)
+        return <- collection
+    }
+
+    access(all) fun createEmptyRunCollection(): @RunCollection {
+        let collection <- create RunCollection()
+        emit RunCollectionCreated(owner: self.account.address)
+        return <- collection
     }
 
     // -----------------------------------------------------------
-    // CONTRACT-LEVEL NFT FUNCTIONS
-    // -----------------------------------------------------------
-
- access(all) fun createEmptyCollection(nftType: Type): @{NonFungibleToken.Collection} {
-        return <- create CardCollection()
-    }
-
-    // -----------------------------------------------------------
-    // CONTRACT INIT
+    // CONTRACT INITIALIZER
     // -----------------------------------------------------------
 
     init() {
-        self.CardCollectionStoragePath = /storage/AutoGameCardsCollection
-        self.CardCollectionPublicPath = /public/AutoGameCardsCollection
-        self.CardMinterStoragePath = /storage/AutoGameCardsMinter
-        self.BattleCurrentStoragePath = /storage/AutoGameBattleCurrent
-        
-        self.battleCounter = 0
+        self.DomainCollectionStoragePath = StoragePath(identifier: "DomainCollectionStorage")!
+        self.DomainCollectionPublicPath = PublicPath(identifier: "DomainCollectionPublic")!
 
-        // Create the single shared Minter resource
-        self.minter <- create CardMinter()
+        self.RunCollectionStoragePath = StoragePath(identifier: "runCollectionStorage")!
+        self.RunCollectionPublicPath = PublicPath(identifier: "runCollectionPublic")!
     }
 }
