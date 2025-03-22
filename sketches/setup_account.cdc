@@ -1,22 +1,22 @@
-import "NonFungibleToken"
-import "AutoGame"
+import AutoGame from "AutoGame"
 
 transaction {
 
-    prepare(signer: auth(BorrowValue, IssueStorageCapabilityController, PublishCapability, SaveValue, UnpublishCapability) &Account) {
-        // Return early if the account already has a collection
-        if signer.storage.borrow<&AutoGame.CardCollection>(from: AutoGame.CardCollectionStoragePath) != nil {
-            return
-        }
+    prepare(account: auth(IssueStorageCapabilityController, PublishCapability, SaveValue) &Account) {
+        // Create a new RunCollection and store it in the account's storage
+        let runCollection <- AutoGame.createEmptyRunCollection()
+        account.storage.save(<-runCollection, to: AutoGame.RunCollectionStoragePath)
+        let runCollectionCapability = account.capabilities.storage.issue<&AutoGame.RunCollection>(AutoGame.RunCollectionStoragePath)
+        account.capabilities.publish(runCollectionCapability, at: AutoGame.RunCollectionPublicPath)
+     
+        // Create a new DomainCollection and store it in the account's storage
+        let domainCollection <- AutoGame.createEmptyDomainCollection()
+        account.storage.save(<-domainCollection, to: AutoGame.DomainCollectionStoragePath)
+        let domainCollectionCapability = account.capabilities.storage.issue<&AutoGame.DomainCollection>(AutoGame.DomainCollectionStoragePath)
+        account.capabilities.publish(domainCollectionCapability, at: AutoGame.DomainCollectionPublicPath)
+      }
 
-        // Create a new empty collection
-        let collection <- AutoGame.createEmptyCollection(nftType: Type<@AutoGame.Card>())
-
-        // save it to the account
-        signer.storage.save(<-collection, to: AutoGame.CardCollectionStoragePath)
-
-        // create a public capability for the collection
-        let collectionCap = signer.capabilities.storage.issue<&AutoGame.CardCollection>(AutoGame.CardCollectionStoragePath)
-        signer.capabilities.publish(collectionCap, at: AutoGame.CardCollectionPublicPath)
+    execute {
+        log("Account initialized with entity, run, and domain collections.")
     }
 }

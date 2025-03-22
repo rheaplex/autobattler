@@ -1,10 +1,9 @@
 import AutoGame from "AutoGame"
 
-access(all) fun main(account: Address): AutoGame.BattleResult? {
+access(all) fun main(account: Address): AutoGame.GameTurnResult? {
     // Borrow the RunCollection from the account's storage
     let account = getAccount(account)
-    let runCollectionRef = account.capabilities
-        .borrow<&AutoGame.RunCollection>(AutoGame.RunCollectionPublicPath)
+    let turn = account.storage.borrow<&AutoGame.GameTurn>(from: /storage/turn)
         ?? panic("Could not borrow reference to the run collection")
 
     // Get the current run (assuming the last run is the current one)

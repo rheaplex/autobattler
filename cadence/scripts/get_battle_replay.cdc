@@ -1,23 +1,19 @@
-import AutoGame from "AutoGame"
+import AutoBattler from "AutoBattler"
 
-access(all) fun main(account: Address): [{AutoGame.BattleState}] {
+
+
+access(all) fun main(account: Address): [String] {
     // Borrow the RunCollection from the account's storage
     let account = getAccount(account)
-    let runCollectionRef = account.capabilities
-        .borrow<&AutoGame.RunCollection>(AutoGame.RunCollectionPublicPath)
-        ?? panic("Could not borrow reference to the run collection")
+    let battle = account.capabilities.borrow<&AutoBattler.Battle>(/public/battle)
+        ?? panic("Could not borrow reference to the Battle")
 
-    // Get the current run (assuming the last run is the current one)
-    let runIDs = runCollectionRef.getIDs()
-    if runIDs.length == 0 {
-        return []
+    let turns: [AutoBattler.Turn] = battle.simulate()
+    let descs: [String] = ["Result: ".concat(battle.result.rawValue.toString())]
+
+    for i in InclusiveRange(0, turns.length - 1) {
+        descs.append(i.toString().concat(" - ").concat(turns[i].toString()))
     }
-    let currentRunID = runIDs[runIDs.length - 1]
-    let currentRunRef = runCollectionRef.borrowRun(id: currentRunID)
 
-    // Get the battle result from the current run
-    let battleIndex = currentRunRef.battleCount() - 1
-    let battle = currentRunRef.borrowBattle(index: battleIndex)
-
-    return battle.replay()
+    return descs
 }

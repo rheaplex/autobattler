@@ -1,18 +1,12 @@
 {
 	"contracts": {
-		"AutoGame": {
-			"source": "cadence/contracts/AutoGame.cdc",
-			"aliases": {
-				"emulator": "f8d6e0586b0a20c7"
-			}
-		},
-		"Xorshift128plus": {
-			"source" : "cadence/contracts/Xorshift128plus.cdc",
-			"aliases": {
-				"emulator": "f8d6e0586b0a20c7"
-			}
-		}
-	},
+        "AutoBattler": {
+            "source": "cadence/contracts/AutoBattler.cdc",
+            "aliases": {
+                "emulator": "f8d6e0586b0a20c7"
+            }
+        }
+    },
 	"dependencies": {
 		"Burner": {
 			"source": "mainnet://f233dcee88fe0abe.Burner",
@@ -125,12 +119,11 @@
 			}
 		}
 	},
-	"deployments": {
-		"emulator": {
-			"emulator-account": [
-				"Xorshift128plus",
-				"AutoGame"
-			]
-		}
-	}
+    "deployments": {
+        "emulator": {
+            "emulator-account": [
+                "AutoBattler"
+            ]
+        }
+    }
 }
