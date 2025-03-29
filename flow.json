@@ -5,6 +5,12 @@
             "aliases": {
                 "emulator": "f8d6e0586b0a20c7"
             }
+        },
+        "ToyPRNG": {
+            "source": "cadence/contracts/ToyPRNG.cdc",
+            "aliases": {
+                "emulator": "f8d6e0586b0a20c7"
+            }
         }
     },
 	"dependencies": {
@@ -122,6 +128,7 @@
     "deployments": {
         "emulator": {
             "emulator-account": [
+				"ToyPRNG",
                 "AutoBattler"
             ]
         }
