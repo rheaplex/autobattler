@@ -35,21 +35,21 @@ access(all) contract AutoBattler {
     // A team is a list of entities, each with their state at the time the
     // team was created.
 
-    // Playthrough
-    // A playthrough is a resource that contains a player's state within 
+    // Run
+    // A Run is a resource that contains a player's state within
     // a Season.
     // It is created when a player starts a Season.
     // It is updated when a player engages in a Battle.
     // It keeps a history of teams so that these can be matched to other
     // players for battles.
     // It keeps a history of battles, but not turns.
-    // The playthrough continues until the player finishes or they achieve
+    // The Run continues until the player finishes or they achieve
     // a victory condition set by the Season, whichever comes first.
     // To play through a season, the player steps repeatedly through three
     // stages, Shop, Team Assembly, and Battle.
 
     //--------------------------------------------------------------------
-    // PLAYTHROUGH STAGES
+    // Run STAGES
     //--------------------------------------------------------------------
 
     // SHOP STAGE
@@ -68,7 +68,7 @@ access(all) contract AutoBattler {
     // well to avoid attacks enabled by knowledge of the seed.
     // The opponent's team state determined by the Season at the time
     // the Battle is run onchain. Its state is copied from the opponent's
-    // Playthrough Team history for the same battle.
+    // Run Team history for the same battle.
     // To calculate the outcome of the battle, the Battle resource
     // regenerates the initial state of the Battle and then enters a
     // game loop that processes each Turn in order.
@@ -135,6 +135,28 @@ access(all) contract AutoBattler {
     access(all) struct interface Ability : Component {
         access(all) let affectsAttribute: Type
         access(all) var amount:           Int8
+    }
+
+    // On-chain metadata until we plumb in ipfs.
+
+    access(all) struct Metadata: Component {
+        access(all) var name: String
+        access(all) var description: String
+        access(all) var imageUrl: String
+
+        init(name: String, description: String, imageUrl: String) {
+            self.name = name
+            self.description = description
+            self.imageUrl = imageUrl
+        }
+
+        access(all) fun copy(): {Component} {
+            return Metadata (
+                name: self.name,
+                description: self.description,
+                imageUrl: self.imageUrl
+            )
+        }
     }
 
     //--------------------------------------------------------------------
@@ -482,7 +504,7 @@ access(all) contract AutoBattler {
         access(contract) var url: String
 
         //FIXME: Name this better. Called to set up an entity for
-        //       a PlayThrough.
+        //       a Run.
         access(all) fun initializeEntity(_ entity: &Entity)
 
         // This is called *once* to modify onchain state after a battle
@@ -620,21 +642,21 @@ access(all) contract AutoBattler {
     }
 
     //--------------------------------------------------------------------
-    // PLAYTHROUGH
+    // Run
     //--------------------------------------------------------------------
 
-    access(all) enum PlaythroughStage: UInt8 {
+    access(all) enum RunStage: UInt8 {
         access(all) case Store
         access(all) case Battle
     }
 
-    access(all) resource Playthrough {
+    access(all) resource Run {
         access(all) let season: Capability<&{AutoBattler.Season}>
         access(all) let entities: {UInt64: Entity}
         access(all) let myTeam: [UInt64]
         access(all) var battles: [Battle]
         access(all) var coins: UInt64
-        access(all) var stage: PlaythroughStage
+        access(all) var stage: RunStage
 
         init(season: Capability<&{AutoBattler.Season}>) {
             self.season = season
@@ -642,10 +664,10 @@ access(all) contract AutoBattler {
             self.myTeam = []
             self.battles = []
             self.coins = 0
-            self.stage = PlaythroughStage.Store
+            self.stage = RunStage.Store
         }
 
-        access(contract) fun setStage(_ stage: PlaythroughStage) {
+        access(contract) fun setStage(_ stage: RunStage) {
             self.stage = stage
         }
 
@@ -659,7 +681,7 @@ access(all) contract AutoBattler {
 
         access(contract) fun addEntityToTeam (id: UInt64, index: Int) {
             pre {
-                self.stage == PlaythroughStage.Store
+                self.stage == RunStage.Store
                 index >= 0
                 self.entities.keys.contains(id)
                 self.myTeam.length <= index
@@ -674,13 +696,13 @@ access(all) contract AutoBattler {
         }
 
         access(all) fun removeEntityFromTeam (index: Int) {
-            pre { self.stage == PlaythroughStage.Store }
+            pre { self.stage == RunStage.Store }
             let _ = self.myTeam.remove(at: index)
         }
 
         access(contract) fun newBattle(systems: [Capability<&{AutoBattler.System}>]) {
-            pre { self.stage == PlaythroughStage.Store }
-            self.stage = PlaythroughStage.Battle
+            pre { self.stage == RunStage.Store }
+            self.stage = RunStage.Battle
             let team: [Entity] = []
             for id in self.myTeam {
                 team.append(self.entities[id]!.copy())
@@ -704,41 +726,58 @@ access(all) contract AutoBattler {
         }
     }
 
+
+    access(all) entitlement Pass
+
     access(all) resource interface Season {
-        access(contract) var url: String
+        access(all) var url: String
+        access(all) var name: String
         access(all) let currencyName: String
         access(all) let currencySymbol: String
         access(all) var currencyPerStorePhase: UInt64
         access(all) var systems: [Capability<&{AutoBattler.System}>]
-        access(all) var playthroughPrice: UFix64
+        access(all) var RunPrice: UFix64
 
         access(all) fun getEntityIds(): [UInt64]
         access(all) fun getEntityPrice(id: UInt64): UInt64
-        access(all) fun purchaseEntity(playthrough: &Playthrough, id: UInt64)
+        access(Pass) fun purchaseEntity(Run: &Run, id: UInt64)
 
-        access(contract) fun purchaseSeasonPlaythrough (payment: @{FungibleToken.Vault}): @Playthrough
+        access(contract) fun purchaseSeasonRun (payment: @{FungibleToken.Vault}): @Run
 
-        access(contract) fun startBattle(playthrough: &Playthrough)
-        access(contract) fun endBattle(playthrough: &Playthrough)
+        access(Pass) fun startBattle(Run: &Run)
+        access(Pass) fun endBattle(Run: &Run)
     }
 
     access(all) resource StandardSeason: Season {
-        access(contract) var url: String
+        access(all) var url: String
+        access(all) var name: String
         access(all) let currencyName: String
         access(all) let currencySymbol: String
         access(all) var currencyPerStorePhase: UInt64
         access(all) var systems: [Capability<&{AutoBattler.System}>]
         access(all) var entities: {UInt64: StoreEntity}
-        access(all) var playthroughPrice: UFix64
+        access(all) var RunPrice: UFix64
 
-        init(url: String, currencyName: String, currencySymbol: String, currencyPerStorePhase: UInt64, playthroughPrice: UFix64) {
+        access(all) var cap: Capability<auth(Pass) &{AutoBattler.Season}>
+
+        init(
+            url: String,
+            name: String,
+            currencyName: String,
+            currencySymbol: String,
+            currencyPerStorePhase: UInt64,
+            RunPrice: UFix64,
+            cap: Capability<auth(Pass) &{AutoBattler.Season}>
+        ) {
             self.url = url
+            self.name = name
             self.currencyName = currencyName
             self.currencySymbol = currencySymbol
             self.systems = []
             self.entities = {}
             self.currencyPerStorePhase = currencyPerStorePhase
-            self.playthroughPrice = playthroughPrice
+            self.RunPrice = RunPrice
+            self.cap = cap
         }
 
         access(all) fun addSystem(_ system: Capability<&{AutoBattler.System}>) {
@@ -761,71 +800,71 @@ access(all) contract AutoBattler {
             return self.entities[id]!.entity.accessComponent(Type<AutoBattler.Entity>()) as! &AutoBattler.Entity
         } */
 
-        access(all) fun purchaseEntity(playthrough: &Playthrough, id: UInt64) {
+        access(Pass) fun purchaseEntity(Run: &Run, id: UInt64) {
             pre {
-                playthrough.stage == PlaythroughStage.Store
+                Run.stage == RunStage.Store
             }
-            playthrough.setCoins(playthrough.coins - self.entities[id]!.price)
-            playthrough.addPurchasedEntity(self.entities[id]!.entity.copy())
+            Run.setCoins(Run.coins - self.entities[id]!.price)
+            Run.addPurchasedEntity(self.entities[id]!.entity.copy())
         }
 
-        access(contract) fun purchaseSeasonPlaythrough (payment: @{FungibleToken.Vault}): @Playthrough {
+        access(contract) fun purchaseSeasonRun (payment: @{FungibleToken.Vault}): @Run {
             pre { 
-                payment.balance == self.playthroughPrice
+                payment.balance == self.RunPrice
             }
             let vault <- payment as! @FlowToken.Vault
             /////FIXME!!!!!! Deposit!!!!!!!!
             destroy vault
-            /////FIXME: CAPABILITY!!!!!!!!
-            //          one per playthrough, or one for all?
-            return <-create Playthrough(self as Capability<&{AutoBattler.Season}>)
+            return <-create Run(season: self.cap)
         }
 
-        access(contract) fun startBattle(playthrough: &Playthrough) {
-            pre { playthrough.stage == PlaythroughStage.Store }
+        access(Pass) fun startBattle(Run: &Run) {
+            pre { Run.stage == RunStage.Store }
 
-            playthrough.newBattle(systems: self.systems)
+            Run.newBattle(systems: self.systems)
         }
 
-        access(contract) fun endBattle(playthrough: &Playthrough) {
-            pre { playthrough.stage == PlaythroughStage.Battle }
+        access(Pass) fun endBattle(Run: &Run) {
+            pre { Run.stage == RunStage.Battle }
 
-            let battle = playthrough.battles[playthrough.battles.length - 1]
+            let battle = Run.battles[Run.battles.length - 1]
             // FIXME: CHOOSE AN OPPOSING TEAM.
-            let theirTeam = AutoBattler.randomTeam()
+            let theirTeam: [Entity] = []
             let _ = battle.battle(theirTeam)
-            // These should go in the playthrough.
-            playthrough.setStage(PlaythroughStage.Store)
-            playthrough.setCoins(self.currencyPerStorePhase)
+            // These should go in the Run.
+            Run.setStage(RunStage.Store)
+            Run.setCoins(self.currencyPerStorePhase)
         }
+    }
+
+    access(all) fun createSeason(url: String, name: String, currencyName: String, currencySymbol: String, currencyPerStorePhase: UInt64, RunPrice: UFix64, cap: Capability<auth(Pass) &{AutoBattler.Season}>): @AutoBattler.StandardSeason {
+        return <-create AutoBattler.StandardSeason(
+            url: url,
+            name: name,
+            currencyName: currencyName,
+            currencySymbol: currencySymbol,
+            currencyPerStorePhase: currencyPerStorePhase,
+            RunPrice: RunPrice,
+            cap: cap
+        )
     }
 
     //--------------------------------------------------------------------
     // Testing
     //--------------------------------------------------------------------
 
-    access(all) fun randomEntity() : Entity {
-        let h = Int8(1 as UInt8 + revertibleRandom<UInt8>(modulo: 4))
-        let health = Health(value: h)
-        let d = Int8(1 as UInt8 + revertibleRandom<UInt8>(modulo: 2))
-        let damage = Damage(amount: d)
-        return Entity(components: {
-            Type<Health>(): health,
-            Type<Damage>(): damage
-        }, nil)
+    access(all) fun veryBasicEntity(health: Int8, damage: Int8, metadata: Metadata) : Entity {
+        return Entity(
+            components: {
+            Type<Health>(): Health(value: health),
+            Type<Damage>(): Damage(amount: damage),
+            Type<Metadata>(): metadata
+            },
+            nil
+        )
     }
 
-    access(all) fun randomTeam() : [Entity] {
-        return [
-            AutoBattler.randomEntity(),
-            AutoBattler.randomEntity(),
-            AutoBattler.randomEntity(),
-            AutoBattler.randomEntity(),
-            AutoBattler.randomEntity()
-        ]
-    }
-
-    access(all) fun runOneBattle() : Battle {
+    /*access(all) fun runOneBattle() : Battle {
         let ourTeam = AutoBattler.randomTeam()
         let theirTeam = AutoBattler.randomTeam()
 
@@ -838,7 +877,7 @@ access(all) contract AutoBattler {
         battle.battle(theirTeam)
 
         return battle
-    }
+    }*/
 
     //--------------------------------------------------------------------
     // CONTRACT INITIALIZER

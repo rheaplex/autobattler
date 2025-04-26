@@ -11,7 +11,13 @@
             "aliases": {
                 "emulator": "f8d6e0586b0a20c7"
             }
-        }
+        },
+		"BattleBalls": {
+			"source": "cadence/contracts/BattleBalls.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7"
+			}
+		}
     },
 	"dependencies": {
 		"Burner": {
@@ -129,7 +135,8 @@
         "emulator": {
             "emulator-account": [
 				"ToyPRNG",
-                "AutoBattler"
+                "AutoBattler",
+				"BattleBalls"
             ]
         }
     }
