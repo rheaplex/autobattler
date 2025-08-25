@@ -264,7 +264,6 @@ access(all) contract AutoBattler {
         return <- create CharacterDefinition(
             instantiatorCap: instantiatorCap,
             vault: vault)
-
     }
 
 
@@ -346,9 +345,6 @@ access(all) contract AutoBattler {
     /* CharacterInstance
      *
      * An instance of the Character owned by a Pass.
-     *
-     * Note that we would like there to be a "freeze-dried" version in the store, before this,
-     * but that is not yet implemnted.
      */
 
     access(all) struct CharacterInstance {
@@ -1137,7 +1133,7 @@ access(all) contract AutoBattler {
         access(self) var battles: [Battle]
         access(all) var  coins: UInt64
         access(all) var  stage: RunStage
-        access(all) var  nextCharacterId: UInt64
+        access(all) var  nextCharacterId: UInt64 //????????????
 
         init(season: Capability<auth(SeasonPass) &Season>) {
             self.season = season
@@ -1396,7 +1392,7 @@ access(all) contract AutoBattler {
             return <-payments
         }
 
-        access(all) fun purchasePass(payment: @FlowToken.Vault): @Pass {
+        access(PurchaseSeasonPass) fun purchasePass(payment: @FlowToken.Vault): @Pass {
             pre {
                 payment.balance == self.runPrice: "Incorrect payment for Season Pass."
             }
@@ -1488,9 +1484,9 @@ access(all) contract AutoBattler {
     */
 
     access(all) resource SeasonPassVendor {
-      access(self) let purchaseCap: Capability<auth(SeasonPass) &Season>
+      access(self) let purchaseCap: Capability<auth(PurchaseSeasonPass) &Season>
 
-        init (seasonPassCap: Capability<auth(SeasonPass) &Season>) {
+        init (seasonPassCap: Capability<auth(PurchaseSeasonPass) &Season>) {
             self.purchaseCap = seasonPassCap
         }
 
@@ -1513,7 +1509,7 @@ access(all) contract AutoBattler {
      * A public creation function for SeasonPassVendor resources.
      */
 
-    access(all) fun createSeasonPassVendor(seasonPassCap: Capability<auth(SeasonPass) &Season>): @SeasonPassVendor {
+    access(all) fun createSeasonPassVendor(seasonPassCap: Capability<auth(PurchaseSeasonPass) &Season>): @SeasonPassVendor {
         return <- create SeasonPassVendor(seasonPassCap: seasonPassCap)
     }
 

@@ -40,7 +40,8 @@ transaction(charactersAcct: Address) {
         self.storage.save(<-battleBalls, to: /storage/BattleBallsSeason)
 
         // Make it so that anyone can buy a season pass
-        let vendor <- AutoBattler.createSeasonPassVendor(seasonPassCap: seasonCap)
+        let purchaseSeasonCap = self.capabilities.storage.issue<auth(AutoBattler.PurchaseSeasonPass) &AutoBattler.Season>(/storage/BattleBallsSeason)
+        let vendor <- AutoBattler.createSeasonPassVendor(seasonPassCap: purchaseSeasonCap)
         self.storage.save(<-vendor, to: /storage/BattleBallsVendor)
         let vendorCap = self.capabilities.storage.issue<&AutoBattler.SeasonPassVendor>(/storage/BattleBallsVendor)
         self.capabilities.publish(vendorCap, at: /public/PurchaseBattleBallsPass)
